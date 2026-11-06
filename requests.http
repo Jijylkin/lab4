@@ -1,0 +1,378 @@
+@baseUrl = http://localhost:8080
+@captain = patriot@mail.ru
+@second = kozel@mail.ru
+@third = titan@mail.ru
+
+### Без авторизации (401)
+GET {{baseUrl}}/api/tournaments
+
+### CSRF-токен (200)
+GET {{baseUrl}}/api/account/csrf
+
+> {% client.global.set("csrfToken", response.body.token); %}
+
+### Слишком простой пароль (400)
+POST {{baseUrl}}/api/account/register
+X-CSRF-TOKEN: {{csrfToken}}
+Content-Type: application/json
+
+{"name": "Игрок", "email": "{{captain}}", "password": "12345"}
+
+### Регистрация капитана (Хоумлендеров Олег), роль остаётся PLAYER (201)
+POST {{baseUrl}}/api/account/register
+X-CSRF-TOKEN: {{csrfToken}}
+Content-Type: application/json
+
+{"name": "Хоумлендеров Олег", "email": "{{captain}}", "password": "Captain2026!", "role": "ORGANIZER"}
+
+> {% client.global.set("captainId", response.body.id); %}
+
+### Повторный email (409)
+POST {{baseUrl}}/api/account/register
+X-CSRF-TOKEN: {{csrfToken}}
+Content-Type: application/json
+
+{"name": "Хоумлендеров Олег", "email": "{{captain}}", "password": "Captain2026!"}
+
+### Второй капитан (Козлов Алексей) (201)
+POST {{baseUrl}}/api/account/register
+X-CSRF-TOKEN: {{csrfToken}}
+Content-Type: application/json
+
+{"name": "Козлов Алексей", "email": "{{second}}", "password": "Captain2026!"}
+
+> {% client.global.set("secondId", response.body.id); %}
+
+### Третий капитан (Титамир Богдан) (201)
+POST {{baseUrl}}/api/account/register
+X-CSRF-TOKEN: {{csrfToken}}
+Content-Type: application/json
+
+{"name": "Титамир Богдан", "email": "{{third}}", "password": "Captain2026!"}
+
+> {% client.global.set("thirdId", response.body.id); %}
+
+### Ошибка пароля (401)
+GET {{baseUrl}}/api/account/me
+Authorization: Basic {{captain}} WrongPassword1
+
+### Профиль игрока (Хоумлендеров Олег) (200)
+GET {{baseUrl}}/api/account/me
+Authorization: Basic {{captain}} Captain2026!
+
+### Игрок не получает список пользователей (403)
+GET {{baseUrl}}/api/users
+Authorization: Basic {{captain}} Captain2026!
+
+### Самому повысить роль нельзя (403)
+PATCH {{baseUrl}}/api/users/{{captainId}}
+Authorization: Basic {{captain}} Captain2026!
+X-CSRF-TOKEN: {{csrfToken}}
+Content-Type: application/json
+
+{"role": "ORGANIZER"}
+
+### Игрок не создаёт турниры (403)
+POST {{baseUrl}}/api/tournaments
+Authorization: Basic {{captain}} Captain2026!
+X-CSRF-TOKEN: {{csrfToken}}
+Content-Type: application/json
+
+{"name": "Кубок группы", "teamLimit": 3}
+
+### Организатор без CSRF (403)
+POST {{baseUrl}}/api/tournaments
+Authorization: Basic organizer@tournament.local Organize2026!
+Content-Type: application/json
+
+{"name": "Кубок группы", "teamLimit": 3}
+
+### Организатор с неверным CSRF (403)
+POST {{baseUrl}}/api/tournaments
+Authorization: Basic organizer@tournament.local Organize2026!
+X-CSRF-TOKEN: wrong
+Content-Type: application/json
+
+{"name": "Кубок группы", "teamLimit": 3}
+
+### Создать турнир (201)
+POST {{baseUrl}}/api/tournaments
+Authorization: Basic organizer@tournament.local Organize2026!
+X-CSRF-TOKEN: {{csrfToken}}
+Content-Type: application/json
+
+{"name": "Кубок группы", "teamLimit": 3}
+
+> {% client.global.set("tournamentId", response.body.id); %}
+
+### Недостаточно команд для старта (409)
+POST {{baseUrl}}/api/tournaments/{{tournamentId}}/start
+Authorization: Basic organizer@tournament.local Organize2026!
+X-CSRF-TOKEN: {{csrfToken}}
+
+### Команда Орлы (201)
+POST {{baseUrl}}/api/teams
+Authorization: Basic {{captain}} Captain2026!
+X-CSRF-TOKEN: {{csrfToken}}
+Content-Type: application/json
+
+{"name": "Орлы", "captainId": {{captainId}}, "memberIds": [{{secondId}}]}
+
+> {% client.global.set("teamOneId", response.body.id); %}
+
+### Команда Волки (201)
+POST {{baseUrl}}/api/teams
+Authorization: Basic {{second}} Captain2026!
+X-CSRF-TOKEN: {{csrfToken}}
+Content-Type: application/json
+
+{"name": "Волки", "captainId": {{secondId}}, "memberIds": [{{thirdId}}]}
+
+> {% client.global.set("teamTwoId", response.body.id); %}
+
+### Команда Метеор (201)
+POST {{baseUrl}}/api/teams
+Authorization: Basic {{third}} Captain2026!
+X-CSRF-TOKEN: {{csrfToken}}
+Content-Type: application/json
+
+{"name": "Метеор", "captainId": {{thirdId}}, "memberIds": [{{captainId}}]}
+
+> {% client.global.set("teamThreeId", response.body.id); %}
+
+### Чужую команду менять нельзя (403)
+PATCH {{baseUrl}}/api/teams/{{teamOneId}}
+Authorization: Basic {{second}} Captain2026!
+X-CSRF-TOKEN: {{csrfToken}}
+Content-Type: application/json
+
+{"name": "Другая команда"}
+
+### Чужую команду заявить нельзя (403)
+POST {{baseUrl}}/api/team-applications
+Authorization: Basic {{captain}} Captain2026!
+X-CSRF-TOKEN: {{csrfToken}}
+Content-Type: application/json
+
+{"teamId": {{teamTwoId}}, "tournamentId": {{tournamentId}}}
+
+### Первая заявка (Орлы) (201)
+POST {{baseUrl}}/api/team-applications
+Authorization: Basic {{captain}} Captain2026!
+X-CSRF-TOKEN: {{csrfToken}}
+Content-Type: application/json
+
+{"teamId": {{teamOneId}}, "tournamentId": {{tournamentId}}}
+
+> {% client.global.set("applicationOneId", response.body.id); %}
+
+### Вторая заявка (Волки) (201)
+POST {{baseUrl}}/api/team-applications
+Authorization: Basic {{second}} Captain2026!
+X-CSRF-TOKEN: {{csrfToken}}
+Content-Type: application/json
+
+{"teamId": {{teamTwoId}}, "tournamentId": {{tournamentId}}}
+
+> {% client.global.set("applicationTwoId", response.body.id); %}
+
+### Третья заявка (Метеор) (201)
+POST {{baseUrl}}/api/team-applications
+Authorization: Basic {{third}} Captain2026!
+X-CSRF-TOKEN: {{csrfToken}}
+Content-Type: application/json
+
+{"teamId": {{teamThreeId}}, "tournamentId": {{tournamentId}}}
+
+> {% client.global.set("applicationThreeId", response.body.id); %}
+
+### Капитан видит свои заявки (200)
+GET {{baseUrl}}/api/team-applications
+Authorization: Basic {{captain}} Captain2026!
+
+### Чужая заявка закрыта (403)
+GET {{baseUrl}}/api/team-applications/{{applicationTwoId}}
+Authorization: Basic {{captain}} Captain2026!
+
+### Капитан не допускает команды (403)
+POST {{baseUrl}}/api/team-applications/{{applicationOneId}}/approve
+Authorization: Basic {{captain}} Captain2026!
+X-CSRF-TOKEN: {{csrfToken}}
+
+### Допустить первую команду (Орлы) (200)
+POST {{baseUrl}}/api/team-applications/{{applicationOneId}}/approve
+Authorization: Basic organizer@tournament.local Organize2026!
+X-CSRF-TOKEN: {{csrfToken}}
+
+### Допустить вторую команду (Волки) (200)
+POST {{baseUrl}}/api/team-applications/{{applicationTwoId}}/approve
+Authorization: Basic organizer@tournament.local Organize2026!
+X-CSRF-TOKEN: {{csrfToken}}
+
+### Допустить третью команду (Метеор) (200)
+POST {{baseUrl}}/api/team-applications/{{applicationThreeId}}/approve
+Authorization: Basic organizer@tournament.local Organize2026!
+X-CSRF-TOKEN: {{csrfToken}}
+
+### Снятие до начала турнира (409)
+POST {{baseUrl}}/api/team-applications/{{applicationOneId}}/withdraw
+Authorization: Basic {{captain}} Captain2026!
+X-CSRF-TOKEN: {{csrfToken}}
+
+### Капитан не запускает турнир (403)
+POST {{baseUrl}}/api/tournaments/{{tournamentId}}/start
+Authorization: Basic {{captain}} Captain2026!
+X-CSRF-TOKEN: {{csrfToken}}
+
+### Начать турнир (200)
+POST {{baseUrl}}/api/tournaments/{{tournamentId}}/start
+Authorization: Basic organizer@tournament.local Organize2026!
+X-CSRF-TOKEN: {{csrfToken}}
+
+> {% client.global.set("matchId", response.body.matches[0].id); %}
+
+### Таблица после старта (200)
+GET {{baseUrl}}/api/tournaments/{{tournamentId}}/standings
+Authorization: Basic {{captain}} Captain2026!
+
+### Не все матчи сыграны (409)
+POST {{baseUrl}}/api/tournaments/{{tournamentId}}/finish
+Authorization: Basic organizer@tournament.local Organize2026!
+X-CSRF-TOKEN: {{csrfToken}}
+
+### Игрок не записывает результат (403)
+POST {{baseUrl}}/api/matches/{{matchId}}/result
+Authorization: Basic {{captain}} Captain2026!
+X-CSRF-TOKEN: {{csrfToken}}
+Content-Type: application/json
+
+{"score1": 2, "score2": 1}
+
+### Записать результат (200)
+POST {{baseUrl}}/api/matches/{{matchId}}/result
+Authorization: Basic organizer@tournament.local Organize2026!
+X-CSRF-TOKEN: {{csrfToken}}
+Content-Type: application/json
+
+{"score1": 2, "score2": 1}
+
+### Повторно записать результат нельзя (409)
+POST {{baseUrl}}/api/matches/{{matchId}}/result
+Authorization: Basic organizer@tournament.local Organize2026!
+X-CSRF-TOKEN: {{csrfToken}}
+Content-Type: application/json
+
+{"score1": 0, "score2": 0}
+
+### Лимит после старта не меняется (409)
+PATCH {{baseUrl}}/api/tournaments/{{tournamentId}}
+Authorization: Basic organizer@tournament.local Organize2026!
+X-CSRF-TOKEN: {{csrfToken}}
+Content-Type: application/json
+
+{"teamLimit": 4}
+
+### Удалением команды нельзя обойти снятие (409)
+DELETE {{baseUrl}}/api/teams/{{teamThreeId}}
+Authorization: Basic {{third}} Captain2026!
+X-CSRF-TOKEN: {{csrfToken}}
+
+### Заявку после старта не удалить (409)
+DELETE {{baseUrl}}/api/team-applications/{{applicationOneId}}
+Authorization: Basic {{captain}} Captain2026!
+X-CSRF-TOKEN: {{csrfToken}}
+
+### Снять чужую команду нельзя (403)
+POST {{baseUrl}}/api/team-applications/{{applicationThreeId}}/withdraw
+Authorization: Basic {{captain}} Captain2026!
+X-CSRF-TOKEN: {{csrfToken}}
+
+### Капитан снимает свою команду (200)
+POST {{baseUrl}}/api/team-applications/{{applicationThreeId}}/withdraw
+Authorization: Basic {{third}} Captain2026!
+X-CSRF-TOKEN: {{csrfToken}}
+
+### Все матчи (200)
+GET {{baseUrl}}/api/matches
+Authorization: Basic {{captain}} Captain2026!
+
+### Капитан не завершает турнир (403)
+POST {{baseUrl}}/api/tournaments/{{tournamentId}}/finish
+Authorization: Basic {{captain}} Captain2026!
+X-CSRF-TOKEN: {{csrfToken}}
+
+### Завершить турнир (200)
+POST {{baseUrl}}/api/tournaments/{{tournamentId}}/finish
+Authorization: Basic organizer@tournament.local Organize2026!
+X-CSRF-TOKEN: {{csrfToken}}
+
+### Итоговая таблица (200)
+GET {{baseUrl}}/api/tournaments/{{tournamentId}}/standings
+Authorization: Basic {{captain}} Captain2026!
+
+### Результат после завершения закрыт (409)
+POST {{baseUrl}}/api/matches/{{matchId}}/result
+Authorization: Basic organizer@tournament.local Organize2026!
+X-CSRF-TOKEN: {{csrfToken}}
+Content-Type: application/json
+
+{"score1": 3, "score2": 1}
+
+### Заблокировать игрока (200)
+PATCH {{baseUrl}}/api/users/{{captainId}}
+Authorization: Basic organizer@tournament.local Organize2026!
+X-CSRF-TOKEN: {{csrfToken}}
+Content-Type: application/json
+
+{"enabled": false}
+
+### Заблокированный игрок не входит (401)
+GET {{baseUrl}}/api/account/me
+Authorization: Basic {{captain}} Captain2026!
+
+### Снять блокировку (200)
+PATCH {{baseUrl}}/api/users/{{captainId}}
+Authorization: Basic organizer@tournament.local Organize2026!
+X-CSRF-TOKEN: {{csrfToken}}
+Content-Type: application/json
+
+{"enabled": true}
+
+### Вход после снятия блокировки (200)
+GET {{baseUrl}}/api/account/me
+Authorization: Basic {{captain}} Captain2026!
+
+### Удалить тестовый турнир (204)
+DELETE {{baseUrl}}/api/tournaments/{{tournamentId}}
+Authorization: Basic organizer@tournament.local Organize2026!
+X-CSRF-TOKEN: {{csrfToken}}
+
+### Удалить тестовую команду (204)
+DELETE {{baseUrl}}/api/teams/{{teamOneId}}
+Authorization: Basic {{captain}} Captain2026!
+X-CSRF-TOKEN: {{csrfToken}}
+
+### Удалить тестовую команду (204)
+DELETE {{baseUrl}}/api/teams/{{teamTwoId}}
+Authorization: Basic {{second}} Captain2026!
+X-CSRF-TOKEN: {{csrfToken}}
+
+### Удалить тестовую команду (204)
+DELETE {{baseUrl}}/api/teams/{{teamThreeId}}
+Authorization: Basic {{third}} Captain2026!
+X-CSRF-TOKEN: {{csrfToken}}
+
+### Удалить тестового игрока (204)
+DELETE {{baseUrl}}/api/users/{{captainId}}
+Authorization: Basic organizer@tournament.local Organize2026!
+X-CSRF-TOKEN: {{csrfToken}}
+
+### Удалить тестового игрока (204)
+DELETE {{baseUrl}}/api/users/{{secondId}}
+Authorization: Basic organizer@tournament.local Organize2026!
+X-CSRF-TOKEN: {{csrfToken}}
+
+### Удалить тестового игрока (204)
+DELETE {{baseUrl}}/api/users/{{thirdId}}
+Authorization: Basic organizer@tournament.local Organize2026!
+X-CSRF-TOKEN: {{csrfToken}}
